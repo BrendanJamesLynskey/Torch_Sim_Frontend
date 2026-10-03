@@ -38,6 +38,9 @@ pipeline {
                     [ -x .venv/bin/python ] || python3 -m venv .venv
                     .venv/bin/pip install -q torch --index-url https://download.pytorch.org/whl/cpu
                     .venv/bin/pip install -q -e ".[test]" ruff
+                    # pip keeps an installed git dependency whose version number has not changed, so
+                    # fetch Disaggregated_Inference_Sim's current commit every time.
+                    .venv/bin/pip install -q --force-reinstall --no-deps "disagg-sim @ git+https://github.com/BrendanJamesLynskey/Disaggregated_Inference_Sim"
                 '''
             }
         }
