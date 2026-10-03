@@ -97,7 +97,8 @@ def main() -> None:
     p("batch 1, BF16. Device rates are Disaggregated_Inference_Sim's H100-SXM roofline (peak x efficiency).")
 
     h("1. Environment")
-    git = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    git = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True,
+                         text=True).stdout.strip()
     table(["Item", "Value"], [["Python", platform.python_version()], ["PyTorch", torch.__version__],
                               ["transformers", transformers.__version__], ["onnx", onnx.__version__],
                               ["CPU", platform.processor() or platform.machine()], ["simfront commit", git or "n/a"]])
@@ -261,7 +262,8 @@ def main() -> None:
     table(["Phase", "Link", "Accelerator runs", "Ops on accel", "FLOPs on accel", "Time on accel", "Time on host",
            "Time in transfers", "Total (ms)"], rows)
     alone = acc.run(pre_fake).time
-    p(f"For reference, the same part running everything: prefill {ms(alone)} ms, decode {ms(acc.run(dec_fake).time)} ms.")
+    p(f"For reference, the same part running everything: prefill {ms(alone)} ms, "
+      f"decode {ms(acc.run(dec_fake).time)} ms.")
     p("Covering 99.9% of FLOPs is not covering the time: the operators left on the host, and the traffic they cause,")
     p("dominate until nearly every category runs on the device.")
     p()

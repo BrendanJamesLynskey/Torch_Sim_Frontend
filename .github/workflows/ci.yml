@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install (CPU-only PyTorch)
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[test]" ruff
+      - name: Lint
+        run: ruff check src tests ci examples
+      - name: Tests (rules, four front ends agreeing, closed forms, PyTorch's FLOP counter, cost models)
+        run: pytest -p no:logging --cov=simfront
+      - name: Arithmetic and drift gate
+        run: python ci/perf_gate.py --margin 3.0
+      - name: CLI smoke test (Llama-3-70B on the meta device)
+        run: simfront --model llama3-70b --tokens 1024 --offload optical --top 5

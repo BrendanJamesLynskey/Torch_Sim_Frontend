@@ -1,0 +1,29 @@
+{
+ "traces": {
+  "llama3-8b prefill 512": {
+   "flops": 7825405642240,
+   "weight_bytes": 15014043648,
+   "ops": 3557,
+   "bytes": 40382673664
+  },
+  "llama3-8b decode @512": {
+   "flops": 15351092995,
+   "weight_bytes": 15009857536,
+   "ops": 3333,
+   "bytes": 17537541192
+  },
+  "qwen2.5-0.5b prefill 256": {
+   "flops": 258834932480,
+   "weight_bytes": 988524288,
+   "ops": 2677,
+   "bytes": 3296000256
+  },
+  "gpt2 prefill 256": {
+   "flops": 65852670208,
+   "weight_bytes": 248093184,
+   "ops": 771,
+   "bytes": 1192438976
+  }
+ },
+ "capture_s": 0.5380606440012343
+}
