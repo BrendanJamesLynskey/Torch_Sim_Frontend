@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.hypothesis/
+.coverage
+coverage.xml
+pytest-junit.xml
+perf_report.md
+sweep.csv
+*.onnx
+build/
+dist/

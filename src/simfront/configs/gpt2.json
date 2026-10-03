@@ -1,0 +1,12 @@
+{
+  "_source": "https://huggingface.co/openai-community/gpt2/blob/main/config.json",
+  "model_type": "gpt2",
+  "vocab_size": 50257,
+  "n_embd": 768,
+  "n_layer": 12,
+  "n_head": 12,
+  "n_positions": 1024,
+  "n_ctx": 1024,
+  "activation_function": "gelu_new",
+  "layer_norm_epsilon": 1e-05
+}
