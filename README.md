@@ -71,9 +71,9 @@ machine's CPU:
 
 | Model | Parameters | Operators | Capture (s) |
 |---|---|---|---|
-| Llama-3-8B | 8.03 B | 3,557 | 0.65 |
-| Llama-3-70B | 70.55 B | 8,837 | 1.25 |
-| Mistral-7B | 7.24 B | 3,685 | 0.67 |
+| Llama-3-8B | 8.03 B | 3,557 | 0.64 |
+| Llama-3-70B | 70.55 B | 8,837 | 1.23 |
+| Mistral-7B | 7.24 B | 3,685 | 0.66 |
 
 **Checking the closed form found an error in it** (§4). Disaggregated_Inference_Sim's
 decode step charges the whole embedding table (1.05 GB, 6.4% of a Llama-3-8B decode
