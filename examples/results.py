@@ -210,7 +210,8 @@ def main() -> None:
     p(f"* **The closed form and the trace now agree** to the two terms the closed form does not model: {agree}.")
     p(f"* **Found and fixed.** This comparison found two errors in Disaggregated_Inference_Sim's closed form, corrected"
       f" there on 2026-10-03. Every decode step was charged the whole input-embedding table, {emb / 1e9:.2f} GB"
-      f" ({emb / old_bytes:.1%} of the old closed form's {old_bytes / 1e9:.2f} GB step at batch 1), where a lookup reads one row; and")
+      f" ({emb / old_bytes:.1%} of the old closed form's {old_bytes / 1e9:.2f} GB step at batch 1),"
+      " where a lookup reads one row; and")
     p(f"  decode attention left out the new token's attention to itself ({4 * spec.n_layers * spec.d_model:,} FLOPs"
       f" per sequence per step). On the H100 roofline the step at context {C:,} is now"
       f" {(dec_an.time - cm.step_overhead) * 1e3:.2f} ms (before step overhead), against {old_t * 1e3:.2f} ms before"
