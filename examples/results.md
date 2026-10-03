@@ -14,7 +14,7 @@ batch 1, BF16. Device rates are Disaggregated_Inference_Sim's H100-SXM roofline 
 | transformers | 5.18.0 |
 | onnx | 1.23.1 |
 | CPU | x86_64 |
-| simfront commit | e8ef627 |
+| simfront commit | 6c96d87 |
 
 
 ## 2. Real model configurations traced without weights
@@ -24,9 +24,9 @@ model; every parameter is a meta tensor (checked), so none of this used paramete
 
 | Model | Parameters | Operators | Op types | Capture (s) | TFLOP | Weights read (GB) | Types with a cost rule |
 |---|---|---|---|---|---|---|---|
-| llama3-8b | 8.03 B | 3,557 | 30 | 0.62 | 32.97 | 15.03 | 30 |
-| llama3-70b | 70.55 B | 8,837 | 30 | 1.21 | 295.83 | 139.04 | 30 |
-| mistral-7b | 7.24 B | 3,685 | 31 | 0.65 | 31.36 | 14.24 | 31 |
+| llama3-8b | 8.03 B | 3,557 | 30 | 0.65 | 32.97 | 15.03 | 30 |
+| llama3-70b | 70.55 B | 8,837 | 30 | 1.25 | 295.83 | 139.04 | 30 |
+| mistral-7b | 7.24 B | 3,685 | 31 | 0.67 | 31.36 | 14.24 | 31 |
 | qwen2.5-0.5b | 0.49 B | 2,677 | 31 | 0.40 | 2.39 | 0.99 | 31 |
 | gpt2 | 0.12 B | 771 | 27 | 0.18 | 0.67 | 0.25 | 27 |
 
@@ -41,15 +41,15 @@ FLOPs include the attention matmuls (QK^T, AV) where attention is decomposed.
 | Front end | Operators | Op types | Matmul FLOPs | Fused-attention FLOPs | Total TFLOP | Bytes moved (GB) | Weights read (GB) | Capture (s) |
 |---|---|---|---|---|---|---|---|---|
 | dispatch (meta) | 3,557 | 30 | 32,938,104,455,168 | 0 | 32.970 | 214.35 | 15.027 | 0.5 |
-| torch.export + Core ATen | 3,850 | 37 | 32,938,104,455,168 | 0 | 32.988 | 333.97 | 15.027 | 13.4 |
-| torch.compile backend | 3,426 | 35 | 32,938,104,455,168 | 0 | 32.970 | 187.40 | 15.027 | 12.0 |
+| torch.export + Core ATen | 3,850 | 37 | 32,938,104,455,168 | 0 | 32.988 | 333.97 | 15.027 | 13.5 |
+| torch.compile backend | 3,426 | 35 | 32,938,104,455,168 | 0 | 32.970 | 187.40 | 15.027 | 11.9 |
 | ONNX (exported without weights) | 6,007 | 35 | 32,938,104,193,024 | 0 | 32.980 | 169.10 | 15.027 | 0.7 |
-| dispatch (fake CPU tensors) | 4,577 | 37 | 30,739,081,199,616 | 2,220,498,092,032 | 32.966 | 70.09 | 15.027 | 0.9 |
+| dispatch (fake CPU tensors) | 4,577 | 37 | 30,739,081,199,616 | 2,220,498,092,032 | 32.966 | 70.09 | 15.027 | 0.8 |
 
 * The four meta-device routes agree exactly on matmul FLOPs, 32,938,104,455,168 (ONNX: 32,938,104,193,024, the rotary-frequency matmul of 262,144 FLOPs constant-folded),
   and on weights read, 15,026,626,560 bytes.
 * That is 2 x matmul parameters x tokens (30,739,080,937,472) + unmasked attention 4 x layers x d x T^2 (2,199,023,255,552) + the rotary matmul (262,144).
-* torch.compile captured 1 graph(s), no graph breaks. The ONNX export (without weights) took 14.9 s and is 11.3 MB.
+* torch.compile captured 1 graph(s), no graph breaks. The ONNX export (without weights) took 14.7 s and is 11.3 MB.
 * Under fake CPU tensors attention is one fused operator per layer (`_scaled_dot_product_flash_attention_for_cpu`); its FLOPs include the softmax (5 per score).
 
 Bytes moved, by operator category (GB):
@@ -171,6 +171,6 @@ coverage report would have named it.
 
 ## 8. Test suite
 
-`pytest`: 38 passed in 37.77s
+`pytest`: 38 passed in 37.73s
 
 Whole script: 90 s; peak resident memory 647 MB.
