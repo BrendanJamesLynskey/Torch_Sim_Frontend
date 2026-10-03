@@ -217,6 +217,13 @@ actually fails. [`tests/test_gate.py`](tests/test_gate.py) now does.
 * S. Williams, A. Waterman, D. Patterson, "Roofline: An Insightful Visual Performance Model for Multicore Architectures", CACM 52(4), 2009.
 * T. Dao, D. Y. Fu, S. Ermon, A. Rudra, C. Ré, "FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness", NeurIPS 2022 ([arXiv:2205.14135](https://arxiv.org/abs/2205.14135)).
 
+## How the measurements are made
+
+The tools and methods this repository measures with are explained, with their overheads, accuracy and pitfalls, in [SimEng 12: Measurement Tools and Methods](https://brendanjameslynskey.github.io/SimEng_12_Measurement_Tools_and_Methods/) and the series glossaries:
+
+* [PyTorch's FLOP counter (FlopCounterMode)](https://brendanjameslynskey.github.io/SimEng_12_Measurement_Tools_and_Methods/#card-flopcounter)
+* [roofline costing](https://brendanjameslynskey.github.io/LLM_Hub_Inference_Simulators/#g-roofline)
+
 ## Related
 
 * [Disaggregated_Inference_Sim](https://github.com/BrendanJamesLynskey/Disaggregated_Inference_Sim): the simulator whose devices and closed forms this uses.
