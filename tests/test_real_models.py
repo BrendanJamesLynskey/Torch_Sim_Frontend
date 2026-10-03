@@ -51,14 +51,19 @@ def test_qwen_biases_are_counted():
 
 
 @pytest.mark.req("SF-05")
-def test_decode_step_matches_closed_form_plus_self_attention():
+def test_decode_step_matches_closed_form():
     spec, C = models.analytic_spec("llama3-8b"), 1024
     m = models.build("llama3-8b")
     tr = trace_dispatch(m, **models.decode_inputs(m, C))[0]
     from disagg_sim.hardware import H100_SXM, CostModel
-    analytic = CostModel(spec, H100_SXM).decode([C]).flops
-    # The new token attends to C cached keys and to itself: C + 1 keys. The analytic model counts C.
-    assert tr.flops_of("matmul") == analytic + 4 * spec.n_layers * spec.d_model + rope_flops(spec, 1)
+    analytic = CostModel(spec, H100_SXM).decode([C])
+    # The new token attends to C cached keys and to itself: C + 1 keys. This test found that the closed form
+    # counted C; Disaggregated_Inference_Sim was corrected on 2026-10-03 and now agrees, up to the rotary matmul.
+    assert tr.flops_of("matmul") == analytic.flops + rope_flops(spec, 1)
+    # Weights read: the layers, the LM head and one embedding row (the closed form once charged the whole
+    # table, 1.05 GB per step: also found here), plus the RMSNorm weights, which the closed form does not model.
+    norms = 2 * (2 * spec.n_layers + 1) * spec.d_model
+    assert tr.weight_bytes == spec.weight_bytes_read(1) + norms
 
 
 @pytest.mark.req("SF-03")

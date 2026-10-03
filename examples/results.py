@@ -181,25 +181,41 @@ def main() -> None:
     pre_an, dec_an = cm.prefill([T]), cm.decode([C])
     pre_tr, dec_tr = routes["dispatch (meta)"], decode_meta("llama3-8b")
     dec_fake, pre_fake = decode_fake("llama3-8b"), routes["dispatch (fake CPU tensors)"]
-    table(["Quantity", "Closed form (InfSim)", "Operator trace", "Difference", "Why"], [
+    # Disaggregated_Inference_Sim's closed form before its 2026-10-03 correction, which this trace prompted:
+    # every step read the whole embedding table, and decode attention counted C keys, not C + 1.
+    old_dec_flops = 2 * spec.matmul_params + 4 * spec.n_layers * spec.d_model * C
+    old_dec_w = int(spec.weight_bytes_total)
+    norms = (2 * spec.n_layers + 1) * spec.d_model * 2          # RMSNorm weights: traced, not in the closed form
+    rope1 = 2 * (spec.head_dim // 2)
+    table(["Quantity", "Closed form (InfSim)", "Operator trace", "Difference", "Why",
+           "Closed form before 2026-10-03"], [
         ["Prefill matmul FLOPs, weights", f"{an_w:,}", f"{pre_tr.flops_of('matmul') - an_att - rope:,}", "0",
-         "exact"],
+         "exact", f"{an_w:,}"],
         ["Prefill attention FLOPs", f"{2 * spec.n_layers * spec.d_model * T * (T + 1):,} (causal)", f"{an_att:,}"
          " (unmasked)", f"{an_att / (2 * spec.n_layers * spec.d_model * T * (T + 1)):.3f}x",
-         "the trace counts what the kernel computes, masked scores included"],
+         "the trace counts what the kernel computes, masked scores included", "same"],
         ["Decode matmul FLOPs", f"{int(dec_an.flops):,}", f"{dec_tr.flops_of('matmul'):,}",
-         f"{dec_tr.flops_of('matmul') - int(dec_an.flops):,}",
-         f"the new token also attends to itself: 4 x layers x d = {4 * spec.n_layers * spec.d_model:,}, "
-         f"+ rotary {2 * (spec.head_dim // 2):,}"],
-        ["Decode weight bytes per step", f"{int(spec.weight_bytes_total):,}", f"{dec_fake.weight_bytes:,}",
-         f"{int(spec.weight_bytes_total) - dec_fake.weight_bytes:,}",
-         "the closed form reads the whole embedding table; a lookup reads one row"],
+         f"{dec_tr.flops_of('matmul') - int(dec_an.flops):,}", f"the rotary-frequency matmul ({rope1:,}), not modelled",
+         f"{old_dec_flops:,} (no self-attention: -{4 * spec.n_layers * spec.d_model:,})"],
+        ["Decode weight bytes per step", f"{int(spec.weight_bytes_read(1)):,}", f"{dec_fake.weight_bytes:,}",
+         f"{dec_fake.weight_bytes - int(spec.weight_bytes_read(1)):,}",
+         f"the RMSNorm weights ({norms:,}), not modelled",
+         f"{old_dec_w:,} (whole embedding table: +{old_dec_w - int(spec.weight_bytes_read(1)):,})"],
     ])
+    agree = (dec_tr.flops_of("matmul") - int(dec_an.flops) == rope1
+             and dec_fake.weight_bytes - int(spec.weight_bytes_read(1)) == norms)
     emb = spec.vocab * spec.d_model * spec.weight_bytes
-    p(f"The embedding-table term is {emb / 1e9:.2f} GB per decode step, {emb / dec_an.bytes:.1%} of the closed form's"
-      f" {dec_an.bytes / 1e9:.2f} GB: on the H100 roofline, {emb / cm.byte_rate * 1e3:.2f} ms of a"
-      f" {(dec_an.time - cm.step_overhead) * 1e3:.2f} ms step (before step overhead). The operator trace corrects")
-    p("the closed form, which is the point of checking one against the other.")
+    old_bytes = old_dec_w + (C + 1) * spec.kv_bytes_per_token
+    old_t = cm.step_time(old_dec_flops, old_bytes)[0] - cm.step_overhead
+    p(f"* **The closed form and the trace now agree** to the two terms the closed form does not model: {agree}.")
+    p(f"* **Found and fixed.** This comparison found two errors in Disaggregated_Inference_Sim's closed form, corrected"
+      f" there on 2026-10-03. Every decode step was charged the whole input-embedding table, {emb / 1e9:.2f} GB"
+      f" ({emb / old_bytes:.1%} of the old closed form's {old_bytes / 1e9:.2f} GB step at batch 1), where a lookup reads one row; and")
+    p(f"  decode attention left out the new token's attention to itself ({4 * spec.n_layers * spec.d_model:,} FLOPs"
+      f" per sequence per step). On the H100 roofline the step at context {C:,} is now"
+      f" {(dec_an.time - cm.step_overhead) * 1e3:.2f} ms (before step overhead), against {old_t * 1e3:.2f} ms before"
+      f" the correction.")
+    p()
 
     # ── 5. costing ──────────────────────────────────────────────────────
     h("5. Costing the traces on the H100 roofline")

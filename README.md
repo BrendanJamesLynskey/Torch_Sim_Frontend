@@ -75,11 +75,16 @@ machine's CPU:
 | Llama-3-70B | 70.55 B | 8,837 | 1.23 |
 | Mistral-7B | 7.24 B | 3,685 | 0.66 |
 
-**Checking the closed form found an error in it** (§4). Disaggregated_Inference_Sim's
-decode step charges the whole embedding table (1.05 GB, 6.4% of a Llama-3-8B decode
-step's bytes) on every token. A lookup reads one row. Its decode FLOPs also leave out
+**Checking the closed form found two errors in it, since fixed** (§4). Disaggregated_Inference_Sim's
+decode step charged the whole embedding table (1.05 GB, 6.4% of a Llama-3-8B decode
+step's bytes) on every token, where a lookup reads one row. Its decode FLOPs also left out
 the new token attending to itself (524,288 FLOPs). Neither is large, and both are the
-kind of thing only an independent count finds.
+kind of thing only an independent count finds. Both were corrected in
+Disaggregated_Inference_Sim (and its JavaScript and Rust ports) on 2026-10-03. The closed form
+and the trace now agree exactly, apart from two small terms the closed form does not model: the
+rotary-frequency matmul (128 FLOPs) and the RMSNorm weights (532,480 bytes). The tests that
+reported the discrepancy now check this agreement. The corrected decode step (5.70 ms at
+context 2,048) equals the trace's ideal-fusion bound.
 
 **What the trace shows depends on how it was captured** (§3, §5):
 

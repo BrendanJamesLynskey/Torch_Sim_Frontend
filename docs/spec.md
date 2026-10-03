@@ -1,6 +1,6 @@
 # simfront: requirements specification
 
-Version 1.1, for simfront 0.1. A worked example for deck SimEng 09 (specifications,
+Version 1.2, for simfront 0.1. A worked example for deck SimEng 09 (specifications,
 requirements and test plans): every requirement below is written in an EARS pattern,
 has a single verification method, and is traced to the tests or CI gate that verify it
 in [`traceability.md`](traceability.md), which `ci/trace_matrix.py` generates from the
@@ -31,7 +31,7 @@ Verification methods: **T** test, **A** analysis, **I** inspection, **D** demons
 | SF-02 | Functional | Event-driven | When a model is traced on the meta device, the front end shall allocate no parameter storage. | T |
 | SF-03 | Functional | Ubiquitous | For SwiGLU decoder configurations, the traced weight-matmul FLOPs of a prefill shall equal 2 × matmul parameters × tokens exactly. | T |
 | SF-04 | Functional | Ubiquitous | The four front ends shall report identical matmul FLOPs and weight bytes for the same model and input, apart from constant folding that is documented per case. | T |
-| SF-05 | Functional | Event-driven | When a decode step is traced, the traced matmul FLOPs shall equal the closed form plus the self-attention term (4 × layers × d_model per token). | T |
+| SF-05 | Functional | Event-driven | When a decode step is traced, the traced matmul FLOPs shall equal the closed form plus the rotary-frequency matmul, and the traced weight bytes shall equal the closed form's per-step weight traffic plus the RMSNorm weights. | T |
 | SF-06 | Functional | Unwanted behaviour | If an operator has no cost rule, then the front end shall cost it at zero and name it in the coverage report. | T |
 | SF-07 | Functional | Event-driven | When a model is exported to ONNX without weights, the front end shall recover the shape and parameter identity of every weight. | T |
 | SF-08 | Functional | State-driven | While the `torch.compile` backend is active, the user's program shall produce outputs identical to eager execution. | T |
@@ -58,3 +58,4 @@ Verification methods: **T** test, **A** analysis, **I** inspection, **D** demons
 |---|---|
 | 1.0 | First issue. |
 | 1.1 | SF-15's verification changed from "T (CI gate)" to T: the first traceability run showed that no test checked the gate itself fails; `tests/test_gate.py` added. |
+| 1.2 | SF-05 reworded (2026-10-03): Disaggregated_Inference_Sim's closed form was corrected (self-attention term, embedding rows instead of the whole table), so the requirement now states agreement, and adds weight bytes. |

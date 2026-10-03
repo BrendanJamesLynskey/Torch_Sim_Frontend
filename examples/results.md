@@ -14,7 +14,7 @@ batch 1, BF16. Device rates are Disaggregated_Inference_Sim's H100-SXM roofline 
 | transformers | 5.18.0 |
 | onnx | 1.23.1 |
 | CPU | x86_64 |
-| simfront commit | 67f36ee |
+| simfront commit | cc64742 |
 
 
 ## 2. Real model configurations traced without weights
@@ -24,11 +24,11 @@ model; every parameter is a meta tensor (checked), so none of this used paramete
 
 | Model | Parameters | Operators | Op types | Capture (s) | TFLOP | Weights read (GB) | Types with a cost rule |
 |---|---|---|---|---|---|---|---|
-| llama3-8b | 8.03 B | 3,557 | 30 | 0.64 | 32.97 | 15.03 | 30 |
-| llama3-70b | 70.55 B | 8,837 | 30 | 1.23 | 295.83 | 139.04 | 30 |
+| llama3-8b | 8.03 B | 3,557 | 30 | 0.65 | 32.97 | 15.03 | 30 |
+| llama3-70b | 70.55 B | 8,837 | 30 | 1.21 | 295.83 | 139.04 | 30 |
 | mistral-7b | 7.24 B | 3,685 | 31 | 0.66 | 31.36 | 14.24 | 31 |
-| qwen2.5-0.5b | 0.49 B | 2,677 | 31 | 0.41 | 2.39 | 0.99 | 31 |
-| gpt2 | 0.12 B | 771 | 27 | 0.17 | 0.67 | 0.25 | 27 |
+| qwen2.5-0.5b | 0.49 B | 2,677 | 31 | 0.40 | 2.39 | 0.99 | 31 |
+| gpt2 | 0.12 B | 771 | 27 | 0.18 | 0.67 | 0.25 | 27 |
 
 Configurations: the architectural fields of the published Hugging Face `config.json` files (sources in
 `src/simfront/configs/`). Llama-3 configs are from the NousResearch mirror, which is not gated.
@@ -41,10 +41,10 @@ FLOPs include the attention matmuls (QK^T, AV) where attention is decomposed.
 | Front end | Operators | Op types | Matmul FLOPs | Fused-attention FLOPs | Total TFLOP | Bytes moved (GB) | Weights read (GB) | Capture (s) |
 |---|---|---|---|---|---|---|---|---|
 | dispatch (meta) | 3,557 | 30 | 32,938,104,455,168 | 0 | 32.970 | 214.35 | 15.027 | 0.5 |
-| torch.export + Core ATen | 3,850 | 37 | 32,938,104,455,168 | 0 | 32.988 | 333.97 | 15.027 | 13.5 |
-| torch.compile backend | 3,426 | 35 | 32,938,104,455,168 | 0 | 32.970 | 187.40 | 15.027 | 11.8 |
+| torch.export + Core ATen | 3,850 | 37 | 32,938,104,455,168 | 0 | 32.988 | 333.97 | 15.027 | 13.6 |
+| torch.compile backend | 3,426 | 35 | 32,938,104,455,168 | 0 | 32.970 | 187.40 | 15.027 | 12.1 |
 | ONNX (exported without weights) | 6,007 | 35 | 32,938,104,193,024 | 0 | 32.980 | 169.10 | 15.027 | 0.7 |
-| dispatch (fake CPU tensors) | 4,577 | 37 | 30,739,081,199,616 | 2,220,498,092,032 | 32.966 | 70.09 | 15.027 | 0.9 |
+| dispatch (fake CPU tensors) | 4,577 | 37 | 30,739,081,199,616 | 2,220,498,092,032 | 32.966 | 70.09 | 15.027 | 0.8 |
 
 * The four meta-device routes agree exactly on matmul FLOPs, 32,938,104,455,168 (ONNX: 32,938,104,193,024, the rotary-frequency matmul of 262,144 FLOPs constant-folded),
   and on weights read, 15,026,626,560 bytes.
@@ -68,15 +68,17 @@ property of the decomposition, not of the model.
 
 ## 4. Cross-check against Disaggregated_Inference_Sim's closed forms
 
-| Quantity | Closed form (InfSim) | Operator trace | Difference | Why |
-|---|---|---|---|---|
-| Prefill matmul FLOPs, weights | 30,739,080,937,472 | 30,739,080,937,472 | 0 | exact |
-| Prefill attention FLOPs | 1,100,048,498,688 (causal) | 2,199,023,255,552 (unmasked) | 1.999x | the trace counts what the kernel computes, masked scores included |
-| Decode matmul FLOPs | 16,083,058,688 | 16,083,583,104 | 524,416 | the new token also attends to itself: 4 x layers x d = 524,288, + rotary 128 |
-| Decode weight bytes per step | 16,059,990,016 | 15,009,857,536 | 1,050,132,480 | the closed form reads the whole embedding table; a lookup reads one row |
+| Quantity | Closed form (InfSim) | Operator trace | Difference | Why | Closed form before 2026-10-03 |
+|---|---|---|---|---|---|
+| Prefill matmul FLOPs, weights | 30,739,080,937,472 | 30,739,080,937,472 | 0 | exact | 30,739,080,937,472 |
+| Prefill attention FLOPs | 1,100,048,498,688 (causal) | 2,199,023,255,552 (unmasked) | 1.999x | the trace counts what the kernel computes, masked scores included | same |
+| Decode matmul FLOPs | 16,083,582,976 | 16,083,583,104 | 128 | the rotary-frequency matmul (128), not modelled | 16,083,058,688 (no self-attention: -524,288) |
+| Decode weight bytes per step | 15,009,325,056 | 15,009,857,536 | 532,480 | the RMSNorm weights (532,480), not modelled | 16,059,990,016 (whole embedding table: +1,050,664,960) |
 
-The embedding-table term is 1.05 GB per decode step, 6.4% of the closed form's 16.33 GB: on the H100 roofline, 0.39 ms of a 6.09 ms step (before step overhead). The operator trace corrects
-the closed form, which is the point of checking one against the other.
+* **The closed form and the trace now agree** to the two terms the closed form does not model: True.
+* **Found and fixed.** This comparison found two errors in Disaggregated_Inference_Sim's closed form, corrected there on 2026-10-03. Every decode step was charged the whole input-embedding table, 1.05 GB (6.4% of the old closed form's 16.33 GB step at batch 1), where a lookup reads one row; and
+  decode attention left out the new token's attention to itself (524,288 FLOPs per sequence per step). On the H100 roofline the step at context 2,048 is now 5.70 ms (before step overhead), against 6.09 ms before the correction.
+
 
 ## 5. Costing the traces on the H100 roofline
 
@@ -88,8 +90,8 @@ The closed-form column is InfSim's CostModel step time without its fixed 0.5 ms 
 |---|---|---|---|---|---|
 | Prefill 2,048, meta trace (math attention) | 126.68 | 44.6% | 71.01 | 58.53 | compute |
 | Prefill 2,048, fake-CPU trace (fused attention) | 76.14 | 79.6% | 60.62 | 58.53 | compute |
-| Decode @2,048, meta trace | 9.34 | 0.0% | 6.41 | 6.09 | memory |
-| Decode @2,048, fake-CPU trace | 5.91 | 0.0% | 5.70 | 6.09 | memory |
+| Decode @2,048, meta trace | 9.34 | 0.0% | 6.41 | 5.70 | memory |
+| Decode @2,048, fake-CPU trace | 5.91 | 0.0% | 5.70 | 5.70 | memory |
 
 Prefill is compute-bound as a whole, yet in the meta trace the materialised score matrix (bmm, softmax and
 mask over 2,048 x 2,048 per head) makes half the time memory-bound: the case for flash attention, measured.
@@ -171,6 +173,6 @@ coverage report would have named it.
 
 ## 8. Test suite
 
-`pytest`: 41 passed in 38.43s
+`pytest`: 41 passed in 38.40s
 
-Whole script: 91 s; peak resident memory 647 MB.
+Whole script: 91 s; peak resident memory 642 MB.
