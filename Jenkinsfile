@@ -1,6 +1,6 @@
 // Jenkins pipeline for Torch_Sim_Frontend.
 //
-// Stages: setup (CPU-only PyTorch, reused across builds) -> lint (ruff) -> tests (pytest,
+// Stages: clean old reports -> setup (CPU-only PyTorch, reused across builds) -> lint (ruff) -> tests (pytest,
 // JUnit) with coverage (Cobertura) -> the arithmetic, drift and speed gate against
 // ci/perf_baseline.json -> the requirements traceability matrix -> results.md -> an optional nightly sweep over models and lengths.
 //
@@ -22,6 +22,15 @@ pipeline {
     }
 
     stages {
+        // The workspace is reused between builds (it keeps the virtualenv and build caches), so
+        // delete the previous build's reports first. Without this a build that fails before its
+        // tests run publishes the last build's JUnit results as its own (Rust_DES_Kernel #4 did).
+        stage('Clean reports') {
+            steps {
+                sh 'rm -f pytest-junit.xml coverage.xml perf_report.md sweep.csv'
+            }
+        }
+
         stage('Setup') {
             steps {
                 // The venv (with a ~700 MB CPU PyTorch) is kept in the workspace between builds.
