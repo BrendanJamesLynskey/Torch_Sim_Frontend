@@ -1,5 +1,6 @@
 """Cost rules on hand-built operators: every formula checked against arithmetic done by hand."""
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -15,6 +16,7 @@ def aten(name, ins, outs):
     return apply_aten_rule(Op(f"aten.{name}", ins, outs))
 
 
+@pytest.mark.req("SF-17")
 @given(st.integers(1, 300), st.integers(1, 300), st.integers(1, 300))
 def test_mm_is_two_mkn(m, k, n):
     op = aten("mm", [T((m, k)), T((k, n), param=True)], [T((m, n))])
@@ -24,6 +26,7 @@ def test_mm_is_two_mkn(m, k, n):
     assert op.weight_bytes == 2 * k * n
 
 
+@pytest.mark.req("SF-17")
 def test_bmm_addmm_linear_conv():
     assert aten("bmm", [T((4, 8, 16)), T((4, 16, 32))], [T((4, 8, 32))]).flops == 2 * 4 * 8 * 16 * 32
     assert aten("addmm", [T((32,)), T((8, 16)), T((16, 32))], [T((8, 32))]).flops == 2 * 8 * 16 * 32 + 8 * 32
@@ -34,6 +37,7 @@ def test_bmm_addmm_linear_conv():
     assert conv.flops == 2 * (8 * 30 * 30) * (3 * 3 * 3) + 8 * 30 * 30
 
 
+@pytest.mark.req("SF-17")
 def test_fused_attention_counts_qk_av_and_softmax():
     q = T((1, 32, 512, 128))
     op = aten("_scaled_dot_product_flash_attention_for_cpu", [q, q, q], [T((1, 32, 512, 128)), T((1, 32, 512))])
@@ -43,6 +47,7 @@ def test_fused_attention_counts_qk_av_and_softmax():
     assert op.bytes_written == q.nbytes            # the log-sum-exp side output is not counted as traffic
 
 
+@pytest.mark.req("SF-17")
 def test_views_are_free_and_copies_are_not():
     x = T((64, 64))
     for name in ("view", "t", "transpose", "expand", "unsqueeze", "slice", "_unsafe_view"):
@@ -52,6 +57,7 @@ def test_views_are_free_and_copies_are_not():
     assert (c.category, c.flops, c.bytes) == ("copy", 0, 2 * x.nbytes)
 
 
+@pytest.mark.req("SF-17")
 def test_elementwise_reduction_softmax():
     x = T((10, 20), size=4)
     assert aten("add", [x, x], [x]).flops == 200
@@ -60,6 +66,7 @@ def test_elementwise_reduction_softmax():
     assert aten("_safe_softmax", [x], [x]).flops == 1000
 
 
+@pytest.mark.req("SF-17")
 def test_embedding_reads_rows_not_the_table():
     table, idx, out = T((128256, 4096), param=True), T((1, 7), size=8), T((1, 7, 4096))
     op = aten("embedding", [table, idx], [out])
@@ -68,11 +75,13 @@ def test_embedding_reads_rows_not_the_table():
     assert op.flops == 0
 
 
+@pytest.mark.req("SF-06")
 def test_unknown_ops_are_zero_and_visible():
     op = aten("frobnicate", [T((4,))], [T((4,))])
     assert (op.category, op.flops, op.bytes) == ("unknown", 0, 0)
 
 
+@pytest.mark.req("SF-17")
 def test_onnx_rules():
     a, b, o = T((1, 2048, 4096)), T((4096, 1024), param=True), T((1, 2048, 1024))
     mm = apply_onnx_rule(Op("onnx.MatMul", [a, b], [o]))

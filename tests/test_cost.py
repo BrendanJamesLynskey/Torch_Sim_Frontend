@@ -22,6 +22,7 @@ def chain():
     return Trace("chain", "test", [apply_aten_rule(o) for o in ops])
 
 
+@pytest.mark.req("SF-17")
 def test_roofline_is_max_of_compute_and_memory_per_op():
     r = Roofline("r", flops_rate=1e12, byte_rate=1e11)
     rep = r.run(chain())
@@ -34,6 +35,7 @@ def test_roofline_is_max_of_compute_and_memory_per_op():
     assert rep.time == pytest.approx(2 * max(mm) + max(add))
 
 
+@pytest.mark.req("SF-09")
 def test_from_device_uses_the_inference_simulators_rates():
     from disagg_sim.hardware import H100_SXM, LLAMA3_8B, CostModel
 
@@ -42,6 +44,7 @@ def test_from_device_uses_the_inference_simulators_rates():
     assert (r.flops_rate, r.byte_rate) == (cm.flops_rate, cm.byte_rate)
 
 
+@pytest.mark.req("SF-17")
 def test_fused_bound_is_below_unfused(llama8b_prefill):
     unf, fus = device("h100").run(llama8b_prefill), device("h100", memory="fused").run(llama8b_prefill)
     assert fus.time < unf.time
@@ -50,6 +53,7 @@ def test_fused_bound_is_below_unfused(llama8b_prefill):
     assert unf.time >= unf.notes["whole_trace_roofline_s"]
 
 
+@pytest.mark.req("SF-10")
 def test_offload_with_everything_supported_is_the_roofline(llama8b_prefill):
     acc = device("h100")
     every = frozenset({"matmul", "attention", "elementwise", "reduction", "softmax", "norm", "gather", "copy",
@@ -60,6 +64,7 @@ def test_offload_with_everything_supported_is_the_roofline(llama8b_prefill):
     assert sum(c.transfer for c in b.costs) == 0         # nothing ever needs to cross the link
 
 
+@pytest.mark.req("SF-10")
 def test_offload_moves_each_tensor_once_per_side():
     host = Roofline("h", 1e12, 1e11)
     off = Offload("o", Roofline("a", 1e13, 1e12), host, link_bw=1e10, link_latency=1e-6,
@@ -72,6 +77,7 @@ def test_offload_moves_each_tensor_once_per_side():
     assert rep.costs[3].transfer == pytest.approx(1e-6 + nb / 1e10)       # b (through a view) -> accel
 
 
+@pytest.mark.req("SF-17")
 @given(st.floats(1e11, 1e15), st.floats(1e9, 1e13), st.floats(1.1, 10))
 def test_faster_hardware_is_never_slower(f, b, k):
     tr = chain()

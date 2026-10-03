@@ -35,6 +35,7 @@ def qk_av_and_weights(t, cfg=None):
     return t.flops_of("matmul") + t.flops_of("attention") - softmax + folded
 
 
+@pytest.mark.req("SF-04")
 @pytest.mark.parametrize("cfg", [models.tiny_llama(), models.tiny_gpt2()], ids=["llama", "gpt2"])
 def test_routes_agree_on_flops_and_weights(cfg, tmp_path):
     _, _, tr = all_routes(cfg, tmp_path)
@@ -50,6 +51,7 @@ def test_routes_agree_on_flops_and_weights(cfg, tmp_path):
         assert t.unknown() == {}, (t.route, t.unknown())
 
 
+@pytest.mark.req("SF-04")
 def test_routes_agree_on_the_meta_device(tmp_path):
     cfg = models.tiny_llama()
     m = models.build(cfg)
@@ -63,6 +65,7 @@ def test_routes_agree_on_the_meta_device(tmp_path):
     assert d.weight_bytes == e.weight_bytes == c.weight_bytes == o.weight_bytes
 
 
+@pytest.mark.req("SF-07")
 def test_onnx_export_runs_in_onnxruntime_and_matches_pytorch(tmp_path):
     ort = pytest.importorskip("onnxruntime")
     m = models.build(models.tiny_llama(), device="cpu", dtype=torch.float32)
@@ -105,6 +108,7 @@ def signature(t):
             if not o.name.startswith("prim.")]
 
 
+@pytest.mark.req("SF-11")
 def test_fake_tensors_trace_exactly_what_real_tensors_run():
     torch.manual_seed(0)
     real = trace_dispatch(Block(), torch.randn(2, 16, 64))[0]
@@ -130,6 +134,7 @@ def test_transformers_takes_a_different_path_when_it_sees_tracing():
     assert fake.bytes > real.bytes
 
 
+@pytest.mark.req("SF-08")
 def test_compile_backend_returns_correct_outputs():
     from simfront.capture import SimBackend
 

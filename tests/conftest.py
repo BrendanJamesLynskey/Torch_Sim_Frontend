@@ -15,3 +15,7 @@ def llama8b_prefill():
 
     m = models.build("llama3-8b")
     return trace_dispatch(m, models.tokens(1, 512), model_name="llama3-8b")[0]
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "req(*ids): the requirements in docs/spec.md this test verifies")

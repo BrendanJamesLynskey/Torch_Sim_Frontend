@@ -6,6 +6,7 @@ from simfront.capture import trace_onnx
 from simfront.cost import device, matmul_engine
 
 
+@pytest.mark.req("SF-06")
 def test_unknown_operator_is_reported(tmp_path):
     """A custom-domain op has no rule: it must be named in the report, not silently costed at zero."""
     x = helper.make_tensor_value_info("x", TensorProto.FLOAT, [4, 8])
@@ -22,6 +23,7 @@ def test_unknown_operator_is_reported(tmp_path):
     assert "onnx.FancyGelu" in coverage.markdown(device("h100").run(tr))
 
 
+@pytest.mark.req("SF-12")
 def test_device_coverage_three_ways(llama8b_prefill):
     rep = matmul_engine("optical").run(llama8b_prefill)
     dc = coverage.device_coverage(rep)
@@ -31,5 +33,6 @@ def test_device_coverage_three_ways(llama8b_prefill):
     assert sum(r["time"] for r in coverage.op_table(rep)) == pytest.approx(rep.time)
 
 
+@pytest.mark.req("SF-06")
 def test_rule_coverage_of_real_traces_is_complete(llama8b_prefill):
     assert coverage.rule_coverage(llama8b_prefill)["unknown"] == {}

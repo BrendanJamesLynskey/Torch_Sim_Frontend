@@ -49,6 +49,28 @@ def measure() -> dict:
     return out
 
 
+def compare(base: dict, now: dict, margin: float, strict: bool = False) -> tuple[list[str], int]:
+    """The gate's verdict: (report lines, number of failures)."""
+    lines = ["# simfront gate", "", "| check | baseline | now | verdict |", "|---|---|---|---|"]
+    bad = 0
+    for k, b in base["traces"].items():
+        n = now["traces"][k]
+        for f in ("flops", "weight_bytes"):
+            ok = n[f] == b[f]
+            bad += not ok
+            lines.append(f"| {k}: {f} | {b[f]:,} | {n[f]:,} | {'ok' if ok else 'CHANGED'} |")
+        for f in ("ops", "bytes"):
+            ok = n[f] == b[f]
+            bad += strict and not ok
+            lines.append(f"| {k}: {f} | {b[f]:,} | {n[f]:,} | {'ok' if ok else 'drift (framework)'} |")
+    b, n = base["capture_s"], now["capture_s"]
+    ok = n <= (1 + margin) * b
+    bad += not ok
+    lines.append(f"| capture llama3-8b prefill 2048 (s) | {b:.3f} | {n:.3f} | {'ok' if ok else 'SLOWER'} "
+                 f"(margin {margin:.0%}) |")
+    return lines, bad
+
+
 def main() -> int:
     warnings.filterwarnings("ignore")
     logging.disable(logging.WARNING)
@@ -62,24 +84,7 @@ def main() -> int:
         BASE.write_text(json.dumps(now, indent=1) + "\n")
         print("blessed", now)
         return 0
-    base = json.loads(BASE.read_text())
-    lines = ["# simfront gate", "", "| check | baseline | now | verdict |", "|---|---|---|---|"]
-    bad = 0
-    for k, b in base["traces"].items():
-        n = now["traces"][k]
-        for f in ("flops", "weight_bytes"):
-            ok = n[f] == b[f]
-            bad += not ok
-            lines.append(f"| {k}: {f} | {b[f]:,} | {n[f]:,} | {'ok' if ok else 'CHANGED'} |")
-        for f in ("ops", "bytes"):
-            ok = n[f] == b[f]
-            bad += a.strict and not ok
-            lines.append(f"| {k}: {f} | {b[f]:,} | {n[f]:,} | {'ok' if ok else 'drift (framework)'} |")
-    b, n = base["capture_s"], now["capture_s"]
-    ok = n <= (1 + a.margin) * b
-    bad += not ok
-    lines.append(f"| capture llama3-8b prefill 2048 (s) | {b:.3f} | {n:.3f} | {'ok' if ok else 'SLOWER'} "
-                 f"(margin {a.margin:.0%}) |")
+    lines, bad = compare(json.loads(BASE.read_text()), now, a.margin, a.strict)
     Path("perf_report.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     return 1 if bad else 0

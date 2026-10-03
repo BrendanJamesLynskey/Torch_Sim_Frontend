@@ -2,7 +2,7 @@
 //
 // Stages: setup (CPU-only PyTorch, reused across builds) -> lint (ruff) -> tests (pytest,
 // JUnit) with coverage (Cobertura) -> the arithmetic, drift and speed gate against
-// ci/perf_baseline.json -> results.md -> an optional nightly sweep over models and lengths.
+// ci/perf_baseline.json -> the requirements traceability matrix -> results.md -> an optional nightly sweep over models and lengths.
 //
 // Needs on the agent: Python 3.10+ and network access to PyPI and download.pytorch.org.
 // Plugins: Pipeline, Git, JUnit, Coverage.
@@ -52,6 +52,13 @@ pipeline {
             }
             post {
                 always { archiveArtifacts artifacts: 'perf_report.md', allowEmptyArchive: true }
+            }
+        }
+
+        stage('Traceability') {
+            steps {
+                sh '.venv/bin/python ci/trace_matrix.py > /dev/null'
+                archiveArtifacts artifacts: 'docs/traceability.md'
             }
         }
 

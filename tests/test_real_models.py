@@ -13,6 +13,7 @@ def rope_flops(spec, tokens):
     return 2 * (spec.head_dim // 2) * tokens
 
 
+@pytest.mark.req("SF-01")
 def test_llama3_8b_trace_shapes(llama8b_prefill):
     mms = [o for o in llama8b_prefill.ops if o.name == "aten.mm"]
     assert len(mms) == 7 * 32 + 1                       # q, k, v, o, gate, up, down per layer + LM head
@@ -25,6 +26,7 @@ def test_llama3_8b_trace_shapes(llama8b_prefill):
     assert llama8b_prefill.unknown() == {}
 
 
+@pytest.mark.req("SF-02", "SF-03")
 @pytest.mark.parametrize("name", ["llama3-8b", "llama3-70b", "mistral-7b"])
 def test_prefill_matmul_flops_equal_closed_form(name):
     spec, T = models.analytic_spec(name), 256
@@ -38,6 +40,7 @@ def test_prefill_matmul_flops_equal_closed_form(name):
     assert all(p.is_meta for p in m.parameters())       # nothing was allocated
 
 
+@pytest.mark.req("SF-03")
 def test_qwen_biases_are_counted():
     spec, T = models.analytic_spec("qwen2.5-0.5b"), 128
     tr = trace_dispatch(models.build("qwen2.5-0.5b"), models.tokens(1, T))[0]
@@ -47,6 +50,7 @@ def test_qwen_biases_are_counted():
         + rope_flops(spec, T) + bias
 
 
+@pytest.mark.req("SF-05")
 def test_decode_step_matches_closed_form_plus_self_attention():
     spec, C = models.analytic_spec("llama3-8b"), 1024
     m = models.build("llama3-8b")
@@ -57,6 +61,7 @@ def test_decode_step_matches_closed_form_plus_self_attention():
     assert tr.flops_of("matmul") == analytic + 4 * spec.n_layers * spec.d_model + rope_flops(spec, 1)
 
 
+@pytest.mark.req("SF-03")
 def test_matches_pytorch_flop_counter(llama8b_prefill):
     m = models.build("llama3-8b")
     with FlopCounterMode(display=False) as fc, torch.no_grad():
@@ -64,6 +69,7 @@ def test_matches_pytorch_flop_counter(llama8b_prefill):
     assert fc.get_total_flops() == llama8b_prefill.flops_of("matmul")
 
 
+@pytest.mark.req("SF-04")
 def test_fake_cpu_gives_fused_attention_with_the_same_arithmetic(llama8b_prefill):
     with models.fake_cpu():
         m = models.build("llama3-8b", device="cpu")
@@ -79,3 +85,11 @@ def test_fake_cpu_gives_fused_attention_with_the_same_arithmetic(llama8b_prefill
         with FlopCounterMode(display=False) as fc, torch.no_grad():
             m(models.tokens(1, 512, "cpu"), use_cache=False)
     assert fc.get_total_flops() == tr.flops_of("matmul")
+
+
+@pytest.mark.req("SF-13")
+def test_capture_of_llama3_8b_prefill_is_fast():
+    """SF-13: under 5 s (it takes well under 1 s here); the CI gate also tracks it against a baseline."""
+    m = models.build("llama3-8b")
+    tr = trace_dispatch(m, models.tokens(1, 2048))[0]
+    assert tr.capture_s < 5.0

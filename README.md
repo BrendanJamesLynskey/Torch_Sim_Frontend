@@ -46,7 +46,7 @@ them comparable, and what lets a cost model follow data between devices.
 python -m venv .venv && source .venv/bin/activate
 pip install torch --index-url https://download.pytorch.org/whl/cpu    # CPU-only is enough
 pip install -e ".[test]"
-pytest -p no:logging                                    # 38 tests, about a minute
+pytest -p no:logging                                    # 41 tests, about a minute
 simfront --model llama3-70b --tokens 2048               # 70B parameters, no memory used
 simfront --model llama3-8b --decode 2048 --fake-cpu     # one decode step, fused attention
 simfront --model llama3-8b --offload optical            # a matmul-only engine plus a host
@@ -140,6 +140,21 @@ for GPT-2's ONNX export (`SplitToSequence`, `SequenceAt`), which were then added
 * Elementwise operations count one FLOP per output element; softmax and norms count five.
 * An embedding lookup reads the rows it gathers, not the table.
 
+## Specification, test plan and traceability
+
+[`docs/spec.md`](docs/spec.md) states 17 requirements in EARS patterns (ubiquitous,
+event-driven, state-driven, unwanted behaviour, optional feature), each with one
+verification method. Tests name the requirements they verify (`@pytest.mark.req("SF-04")`).
+[`ci/trace_matrix.py`](ci/trace_matrix.py) runs the suite and writes
+[`docs/traceability.md`](docs/traceability.md), checking both directions: every
+requirement has a passing test, and every test traces to a requirement or is listed as
+untraced.
+
+Its first run found a real gap. SF-15 ("if a library upgrade changes the traced
+arithmetic, CI shall fail") was claimed by the CI gate, but no test checked that the gate
+actually fails. [`tests/test_gate.py`](tests/test_gate.py) now does.
+[`docs/test_plan.md`](docs/test_plan.md) sets out the oracles, criteria and deliverables.
+
 ## Gotchas found on the way
 
 * **The meta device and transformers' masks.** With the cache off, transformers 5 calls
@@ -182,6 +197,7 @@ for GPT-2's ONNX export (`SplitToSequence`, `SequenceAt`), which were then added
   * the arithmetic, framework-drift and speed gate against
     [`ci/perf_baseline.json`](ci/perf_baseline.json). FLOPs and weight bytes must not
     change; operator counts and bytes moved are reported when a library upgrade changes them;
+  * the traceability matrix;
   * `results.md`;
   * a nightly sweep over models, phases and lengths.
 

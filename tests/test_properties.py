@@ -1,5 +1,6 @@
 """Property: for any Llama-shaped config and length, the traced matmul FLOPs equal the closed form."""
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -17,6 +18,7 @@ def llama_configs(draw):
                              intermediate_size=draw(st.integers(8, 200)), vocab_size=draw(st.integers(16, 3000)))
 
 
+@pytest.mark.req("SF-03")
 @settings(max_examples=30, deadline=None)
 @given(llama_configs(), st.integers(1, 96), st.integers(1, 3))
 def test_traced_matmul_flops_equal_closed_form(cfg, length, batch):
