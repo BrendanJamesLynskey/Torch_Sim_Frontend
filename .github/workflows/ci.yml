@@ -21,9 +21,16 @@ jobs:
           pip install -e ".[test]" ruff
       - name: Lint
         run: ruff check src tests ci examples
-      - name: Tests (rules, four front ends agreeing, closed forms, PyTorch's FLOP counter, cost models)
+      - name: Tests (rules, front ends, closed forms, cost models, the SimPy accelerator and its C++ fast path)
+        env:
+          SIMFRONT_REQUIRE_CPP: "1"     # fail, rather than fall back to Python, if the pybind11 module did not build
         run: pytest -p no:logging --cov=simfront
       - name: Arithmetic and drift gate
         run: python ci/perf_gate.py --margin 3.0
       - name: CLI smoke test (Llama-3-70B on the meta device)
         run: simfront --model llama3-70b --tokens 1024 --offload optical --top 5
+      - name: Accelerator smoke test (CNN timeline, NTT workload on the C++ fast path, cycle-stepped twin)
+        run: |
+          simfront-accel --model tiny-cnn --route onnx --timeline cnn.png --chrome cnn.json
+          simfront-accel --workload polymul --log-n 14 --limbs 4 --transit 1.6 --engine fast
+          simfront-accel --model tiny-cnn --engine cycle --top 3

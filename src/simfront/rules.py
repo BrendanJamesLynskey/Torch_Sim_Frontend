@@ -8,7 +8,7 @@ category       FLOPs                                            bytes
 matmul         2 x (multiply-adds), plus bias adds              inputs + outputs
 attention      QK^T and AV of a fused attention op (unmasked)   q, k, v + output
 elementwise    one per output element                           inputs + outputs
-reduction      one per input element                            inputs + outputs
+reduction      one per input element (pooling included)         inputs + outputs
 softmax        five per element (max, subtract, exp, sum, div)  inputs + outputs
 norm           five per element                                 inputs + outputs
 gather         none                                             indices + rows read + output
@@ -54,7 +54,8 @@ _ATEN = {
                       erf isnan isinf sign floor ceil round square floor_divide remainder fmod lerp addcmul addcdiv
                       _safe_softmax_mask mish hardswish hardsigmoid elu sgn trunc""",
     "reduction": """sum mean amax amin max min prod var var_mean std any all argmax argmin cumsum cumprod norm
-                    logsumexp linalg_vector_norm""",
+                    logsumexp linalg_vector_norm max_pool2d max_pool2d_with_indices max_pool1d max_pool3d avg_pool2d
+                    avg_pool1d avg_pool3d adaptive_avg_pool2d _adaptive_avg_pool2d adaptive_max_pool2d""",
     "softmax": "_softmax softmax _safe_softmax _log_softmax log_softmax",
     "norm": """native_layer_norm layer_norm rms_norm _fused_rms_norm native_group_norm group_norm native_batch_norm
                batch_norm _native_batch_norm_legit_no_training _native_batch_norm_legit""",
@@ -165,7 +166,8 @@ _ONNX = {
     "elementwise": """Add Sub Mul Div Neg Sqrt Reciprocal Pow Exp Log Tanh Sigmoid Relu Gelu Erf Where Equal Less
                       LessOrEqual Greater GreaterOrEqual And Or Not Xor IsNaN IsInf Sin Cos Abs Max Min Clip Sign Floor
                       Ceil Round Mod BitwiseAnd BitwiseOr BitwiseNot LeakyRelu HardSigmoid HardSwish Elu Mish""",
-    "reduction": "ReduceMean ReduceSum ReduceMax ReduceMin ReduceProd ReduceL2 ArgMax ArgMin CumSum",
+    "reduction": """ReduceMean ReduceSum ReduceMax ReduceMin ReduceProd ReduceL2 ArgMax ArgMin CumSum MaxPool
+                    AveragePool GlobalAveragePool GlobalMaxPool""",
     "softmax": "Softmax LogSoftmax",
     "norm": "LayerNormalization SimplifiedLayerNormalization RMSNormalization BatchNormalization GroupNormalization",
     "matmul": "MatMul Gemm Conv",

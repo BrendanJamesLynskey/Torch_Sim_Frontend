@@ -55,6 +55,36 @@ def tiny_gpt2(**overrides):
     return cfg
 
 
+class TinyCNN(torch.nn.Module):
+    """A small image classifier: three conv-batchnorm-ReLU blocks, max pooling, a linear head.
+
+    The convolution workload for the accelerator model (``simfront.accel``): small enough to
+    export to ONNX with weights and run in ONNX Runtime in a test.
+    """
+
+    def __init__(self, channels: tuple[int, ...] = (16, 32, 64), classes: int = 10):
+        super().__init__()
+        layers, c_in = [], 3
+        for c in channels:
+            layers += [torch.nn.Conv2d(c_in, c, 3, padding=1), torch.nn.BatchNorm2d(c), torch.nn.ReLU(),
+                       torch.nn.MaxPool2d(2)]
+            c_in = c
+        self.features = torch.nn.Sequential(*layers)
+        self.head = torch.nn.Linear(c_in, classes)
+
+    def forward(self, x):
+        return self.head(self.features(x).mean(dim=(2, 3)))
+
+
+def tiny_cnn(seed: int = 0, **kw) -> TinyCNN:
+    torch.manual_seed(seed)
+    return TinyCNN(**kw).eval()
+
+
+def image(batch: int = 1, size: int = 32, device: str = "cpu") -> torch.Tensor:
+    return torch.zeros(batch, 3, size, size, device=device)
+
+
 def build(cfg, device: str = "meta", dtype: torch.dtype = torch.bfloat16, seed: int = 0) -> torch.nn.Module:
     """``AutoModelForCausalLM.from_config`` on ``device``; ``cfg`` is a config or a registry name."""
     from transformers import AutoModelForCausalLM

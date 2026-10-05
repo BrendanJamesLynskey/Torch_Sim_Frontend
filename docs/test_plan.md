@@ -1,12 +1,14 @@
 # simfront: test plan
 
-Version 1.0. A worked example for deck SimEng 09. Its sections follow the usual
+Version 1.1. A worked example for deck SimEng 09. Its sections follow the usual
 test-plan contents (as in ISO/IEC/IEEE 29119-3), cut to what a small tool needs.
 
 ## 1. Test items and scope
 
 simfront 0.1: the four front ends (`simfront.capture`), the cost rules (`rules.py`), the
-cost models (`cost.py`), coverage reporting (`coverage.py`) and the CLI, against the
+cost models (`cost.py`), coverage reporting (`coverage.py`), the accelerator model
+(`simfront.accel`: lowering, SimPy engine, fast path in Python and C++, cycle-stepped twin,
+metrics and plots, FIFO, NTT, execution-provider partitioning) and both CLIs, against the
 requirements in [`spec.md`](spec.md). **Out of scope:** the accuracy of the device
 parameters (owned by Disaggregated_Inference_Sim), and PyTorch and transformers themselves.
 
@@ -25,11 +27,19 @@ with what it checks:
 | Faithfulness | Fake tensors and the compile backend | A real run with data; eager outputs | SF-08, SF-11 |
 | External | The exported ONNX model | ONNX Runtime's outputs against PyTorch's | SF-07 |
 | System | CLI, gate, traceability | Expected text; the gate's own failure cases | SF-13, SF-15 |
+| Unit | Accelerator lowering | The cost rules' FLOPs (2 x MACs); hand-worked im2col shapes | SF-18 |
+| Unit | Accelerator invariants | Occupancy within capacity; event order per tile; stalls sum to latency | SF-19, SF-20, SF-21 |
+| Differential | SimPy model against the fast path (Python, C++) and the cycle-stepped twin | Each other, exactly, on real traces and on random programs (Hypothesis) | SF-22, SF-23, SF-24 |
+| Analytic | FIFO model | Little's law, exactly, on every run | SF-27 |
+| Golden model | NTT polynomial product | Schoolbook multiplication (Hypothesis) | SF-25 |
+| Bound | In-transit stage | The stage's operations-per-byte budget | SF-26 |
+| External | Execution-provider partitioning | ONNX Runtime's own profile | SF-28 |
 
 ## 3. Pass/fail criteria
 
 * Every test passes. A test verifying a requirement must pass for the requirement to count as verified.
 * Arithmetic is compared **exactly** (integers). Time and memory are compared against stated limits.
+* Engines of the accelerator model are compared **exactly** (every float of every tile's timings).
 * `ci/trace_matrix.py` reports no requirement without a passing test.
 
 ## 4. Entry and exit criteria
@@ -52,6 +62,7 @@ failing examples are replayed first.
 | `perf_report.md` | `ci/perf_gate.py` |
 | `docs/traceability.md` | `ci/trace_matrix.py` |
 | `examples/results.md` (the performance and accuracy report) | `examples/results.py` |
+| `examples/accel_results.md` and `docs/img/*.png` (the accelerator model's report) | `examples/accel_results.py` |
 | `sweep.csv` | `ci/sweep.py` (nightly) |
 
 ## 7. Risks and mitigations
@@ -62,3 +73,5 @@ failing examples are replayed first.
 | transformers takes a different code path under tracing | Characterised by a test; documented in the README |
 | Timing tests are flaky on a loaded machine | Generous absolute limit (5 s against about 0.6 s); best of three in the gate |
 | A new operator appears without a rule and is costed at zero | Coverage report names it; reference traces must have none |
+| The C++ module silently fails to build and tests fall back to Python | CI sets `SIMFRONT_REQUIRE_CPP=1`, which turns a missing module into a failure |
+| A change to the SimPy model breaks the fast path's equivalence | Exact differential tests on every configuration in CI |

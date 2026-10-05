@@ -19,3 +19,19 @@ def llama8b_prefill():
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "req(*ids): the requirements in docs/spec.md this test verifies")
+
+
+@pytest.fixture(scope="session")
+def accel_traces():
+    """Small traces for the accelerator model: a CNN (convolutions), a tiny Llama and a tiny GPT-2 (export route)."""
+    import torch
+
+    from simfront import models
+    from simfront.capture import trace_export
+
+    cnn = models.tiny_cnn()
+    out = {"cnn": trace_export(cnn, (models.image(),), model_name="tiny-cnn")}
+    for name, cfg in (("llama", models.tiny_llama()), ("gpt2", models.tiny_gpt2())):
+        m = models.build(cfg, device="cpu", dtype=torch.float32)
+        out[name] = trace_export(m, (models.tokens(1, 32, "cpu"),), {"use_cache": False}, model_name=name)
+    return out
