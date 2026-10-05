@@ -407,6 +407,8 @@ The tools and methods this repository measures with are explained, with their ov
 
 * [PyTorch's FLOP counter (FlopCounterMode)](https://brendanjameslynskey.github.io/SimEng_12_Measurement_Tools_and_Methods/#card-flopcounter)
 * [roofline costing](https://brendanjameslynskey.github.io/LLM_Hub_Inference_Simulators/#g-roofline)
+* [Perfetto and the Chrome trace format](https://brendanjameslynskey.github.io/LLM_Hub_Inference_Simulators/#g-perfetto) (the accelerator model's `--chrome` output)
+* [analytic lower bounds](https://brendanjameslynskey.github.io/SimEng_12_Measurement_Tools_and_Methods/#card-bounds) (the roofline bound the accelerator tests check)
 
 ## Related
 
