@@ -14,8 +14,8 @@ hot-spot, and a timeline plot. The same model has a C++20 fast path (pybind11, b
 cycle-stepped twin (identical cycle for cycle), an FHE-style NTT workload, and a miniature of how
 an ONNX Runtime execution provider takes part of a graph.
 
-It is the companion code for decks 10 (from PyTorch and ONNX to an accelerator model) and 14 (an
-accelerator model in SimPy, end to end) of the
+It is the companion code for decks 10 (from PyTorch and ONNX to an accelerator model) and
+[14](https://brendanjameslynskey.github.io/SimEng_14_Accelerator_Model_in_SimPy/) (an accelerator model in SimPy, end to end) of the
 [Simulation Engineering Toolkit](https://github.com/BrendanJamesLynskey/SimEng_Hub_Toolkit)
 series, and it starts from the roofline of
 [Disaggregated_Inference_Sim](https://github.com/BrendanJamesLynskey/Disaggregated_Inference_Sim)
@@ -414,6 +414,7 @@ The tools and methods this repository measures with are explained, with their ov
 
 * [Disaggregated_Inference_Sim](https://github.com/BrendanJamesLynskey/Disaggregated_Inference_Sim): the simulator whose devices and closed forms this uses.
 * [InfSim 09: Framework Integration](https://brendanjameslynskey.github.io/InfSim_09_Framework_Integration/): the integration routes, explained.
+* [SimEng 14: An Accelerator Model in SimPy, End to End](https://brendanjameslynskey.github.io/SimEng_14_Accelerator_Model_in_SimPy/): `simfront.accel` explained, slide by slide.
 * [Simulation Engineering Toolkit](https://github.com/BrendanJamesLynskey/SimEng_Hub_Toolkit): the series this belongs to.
 
 ## Licence
