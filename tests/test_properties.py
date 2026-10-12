@@ -27,7 +27,9 @@ def test_traced_matmul_flops_equal_closed_form(cfg, length, batch):
     kv = cfg.num_key_value_heads * (d // cfg.num_attention_heads)
     weights = L * (2 * d * d + 2 * d * kv + 3 * d * f) + v * d
     hd = d // cfg.num_attention_heads
-    # rotary frequencies come from position_ids of shape (1, length): computed once, not per sequence
-    expected = 2 * batch * length * weights + 4 * L * d * batch * length * length + 2 * (hd // 2) * length
+    # rotary frequencies come from position_ids of shape (1, length): computed once, not per sequence (a
+    # matmul up to transformers 5.18, an elementwise multiply from 5.19)
+    expected = 2 * batch * length * weights + 4 * L * d * batch * length * length \
+        + models.rotary_matmul_flops(hd, length)
     assert tr.flops_of("matmul") == expected
     assert tr.unknown() == {}

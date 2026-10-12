@@ -36,7 +36,7 @@ Verification methods: **T** test, **A** analysis, **I** inspection, **D** demons
 | SF-02 | Functional | Event-driven | When a model is traced on the meta device, the front end shall allocate no parameter storage. | T |
 | SF-03 | Functional | Ubiquitous | For SwiGLU decoder configurations, the traced weight-matmul FLOPs of a prefill shall equal 2 × matmul parameters × tokens exactly. | T |
 | SF-04 | Functional | Ubiquitous | The four front ends shall report identical matmul FLOPs and weight bytes for the same model and input, apart from constant folding that is documented per case. | T |
-| SF-05 | Functional | Event-driven | When a decode step is traced, the traced matmul FLOPs shall equal the closed form plus the rotary-frequency matmul, and the traced weight bytes shall equal the closed form's per-step weight traffic plus the RMSNorm weights. | T |
+| SF-05 | Functional | Event-driven | When a decode step is traced, the traced matmul FLOPs shall equal the closed form plus the rotary-frequency matmul (when the installed transformers computes the rotary frequencies as a matmul), and the traced weight bytes shall equal the closed form's per-step weight traffic plus the RMSNorm weights. | T |
 | SF-06 | Functional | Unwanted behaviour | If an operator has no cost rule, then the front end shall cost it at zero and name it in the coverage report. | T |
 | SF-07 | Functional | Event-driven | When a model is exported to ONNX without weights, the front end shall recover the shape and parameter identity of every weight. | T |
 | SF-08 | Functional | State-driven | While the `torch.compile` backend is active, the user's program shall produce outputs identical to eager execution. | T |
@@ -46,7 +46,7 @@ Verification methods: **T** test, **A** analysis, **I** inspection, **D** demons
 | SF-12 | Functional | Ubiquitous | The front end shall report operator coverage by operator count, FLOPs and time. | T |
 | SF-13 | Non-functional (performance) | Ubiquitous | The dispatch front end shall capture a Llama-3-8B 2,048-token prefill trace in less than 5 s on the CI machine. | T |
 | SF-14 | Non-functional (resource) | Ubiquitous | The front end shall trace every reference model with a peak resident memory below 2 GB. | D (`results.md`) |
-| SF-15 | Non-functional (maintainability) | Unwanted behaviour | If a library upgrade changes the traced FLOPs or weight bytes of a reference trace, then CI shall fail. | T |
+| SF-15 | Non-functional (maintainability) | Unwanted behaviour | If a library upgrade changes the traced FLOPs or weight bytes of a reference trace (other than the documented rotary-frequency shift of transformers 5.19), then CI shall fail. | T |
 | SF-16 | Non-functional (portability) | Ubiquitous | The front end shall run on a CPU-only machine with no GPU and no model weights. | D (GitHub Actions) |
 | SF-17 | Functional | Ubiquitous | The cost rules shall count each operator's FLOPs and bytes by the conventions stated in `rules.py` and `cost.py`. | T |
 | SF-18 | Functional | Ubiquitous | The accelerator model shall lower every operator that has a cost rule into tiles that fit the tile budget, and the tiles of a GEMM shall perform exactly its multiply-accumulates. | T |

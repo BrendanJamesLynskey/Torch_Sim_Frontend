@@ -37,7 +37,9 @@ them comparable, and what lets a cost model follow data between devices.
 * **The four front ends agree exactly.** On Llama-3-8B (2,048-token prefill, meta
   device) all four count 32,938,104,455,168 matmul FLOPs. ONNX is lower by exactly
   262,144: it constant-folds the rotary-frequency matmul. All four count
-  15,026,626,560 bytes of weights read.
+  15,026,626,560 bytes of weights read. (These are transformers 5.18 numbers. From 5.19
+  there is no rotary matmul, so all four agree with no exception; see
+  [the rotary frequencies](#the-rotary-frequencies-and-transformers-519).)
 * **The trace equals the closed form.** The weight matmuls equal Disaggregated_Inference_Sim's
   2 × parameters × tokens exactly. A Hypothesis property test checks the same identity for
   random Llama-shaped configurations, batch sizes and lengths.
@@ -97,8 +99,8 @@ the new token attending to itself (524,288 FLOPs). Neither is large, and both ar
 kind of thing only an independent count finds. Both were corrected in
 Disaggregated_Inference_Sim (and its JavaScript and Rust ports) on 2026-10-03. The closed form
 and the trace now agree exactly, apart from two small terms the closed form does not model: the
-rotary-frequency matmul (128 FLOPs) and the RMSNorm weights (532,480 bytes). The tests that
-reported the discrepancy now check this agreement. The corrected decode step (5.70 ms at
+rotary-frequency matmul (128 FLOPs; none from transformers 5.19, see below) and the RMSNorm
+weights (532,480 bytes). The tests that reported the discrepancy now check this agreement. The corrected decode step (5.70 ms at
 context 2,048) equals the trace's ideal-fusion bound.
 
 **What the trace shows depends on how it was captured** (§3, §5):
@@ -160,6 +162,32 @@ for GPT-2's ONNX export (`SplitToSequence`, `SequenceAt`), which were then added
   attention and gather operators touch memory.
 * Elementwise operations count one FLOP per output element; softmax and norms count five.
 * An embedding lookup reads the rows it gathers, not the table.
+* The rotary frequencies are counted as the installed transformers computes them (next section).
+
+### The rotary frequencies and transformers 5.19
+
+A rotary embedding needs the outer product of the positions and the inverse frequencies:
+positions x head_dim/2 products, once per forward. transformers 5.18 and earlier wrote it as a
+batched matmul with an inner dimension of 1 (`inv_freq[:, None] @ position_ids[None, :]`), so a
+trace shows an `aten.bmm`, charged 2 FLOPs per product like any matmul. 5.19 rewrote the Llama,
+Mistral and Qwen2 code as a broadcast multiply (`position_ids[..., None] * inv_freq`): the same
+products, now an `aten.mul` at 1 FLOP each, and no matmul at all. For Llama-3-8B's 2,048-token
+prefill that is 262,144 matmul FLOPs in 5.18 ([`results.md`](examples/results.md) §3) and, derived,
+2,048 x 64 = 131,072 elementwise FLOPs in 5.19.
+
+**What is counted: what runs.** The closed forms describe the model's real work, and the real
+work changed category, so their rotary term follows the installed version.
+`models.rotary_runs_as_matmul()` traces the rotary module of a one-layer model once (on the meta
+device) and reports whether it ran a matmul, rather than testing a version number;
+`models.rotary_matmul_flops()` gives the term the closed forms add (2 x positions x head_dim/2,
+or 0). A test checks the probe against the full model: exactly one rotary operator per forward,
+a bmm or a multiply, with those FLOPs. ONNX constant-folds the operation in both versions (the
+positions are constants under static shapes), so under 5.19 the four routes agree with no
+correction. The [arithmetic gate](ci/perf_gate.py) expects exactly this shift and nothing else:
+its baseline records `rotary_matmul: true`, and under 5.19 each Llama-family FLOP total is lower
+by positions x head_dim/2 (32,768 for the 512-token Llama-3-8B prefill). CI runs the suite on
+transformers 5.18.0 (the oldest supported) and the latest release.
+[`examples/results.md`](examples/results.md) was recorded with 5.18, the version it lists.
 
 ## The accelerator model: simfront.accel
 
@@ -365,7 +393,8 @@ specification (contents, interfaces, behaviour, timing, ordering, counters, assu
 
 * **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
   * ruff;
-  * the test suite on Python 3.10 and 3.12 with CPU-only PyTorch;
+  * the test suite on Python 3.10 and 3.12 with CPU-only PyTorch, each with transformers 5.18.0
+    and with the latest release;
   * the arithmetic gate;
   * a CLI smoke test that traces Llama-3-70B;
   * the C++ fast path must build (`SIMFRONT_REQUIRE_CPP=1` turns a missing module into a test failure);
@@ -376,7 +405,8 @@ specification (contents, interfaces, behaviour, timing, ordering, counters, assu
   * tests with JUnit and Cobertura coverage;
   * the arithmetic, framework-drift and speed gate against
     [`ci/perf_baseline.json`](ci/perf_baseline.json). FLOPs and weight bytes must not
-    change; operator counts and bytes moved are reported when a library upgrade changes them;
+    change (apart from the exact rotary-frequency shift of transformers 5.19); operator counts and
+    bytes moved are reported when a library upgrade changes them;
   * the traceability matrix;
   * `results.md`;
   * a nightly sweep over models, phases and lengths.

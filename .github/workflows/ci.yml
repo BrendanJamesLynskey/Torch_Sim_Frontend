@@ -8,17 +8,27 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         python: ["3.10", "3.12"]
+        # The oldest supported transformers and the newest. 5.19 changed how the rotary frequencies are computed
+        # (elementwise, not a matmul), which the closed forms follow; both sides of that change are tested.
+        transformers: ["5.18.0", "latest"]
+    name: test (Python ${{ matrix.python }}, transformers ${{ matrix.transformers }})
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - name: Install (CPU-only PyTorch)
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[test]" ruff
+          if [ "${{ matrix.transformers }}" = "latest" ]; then
+            pip install -e ".[test]" ruff
+          else
+            pip install -e ".[test]" ruff "transformers==${{ matrix.transformers }}"
+          fi
+          python -c "import transformers, torch; print('transformers', transformers.__version__, 'torch', torch.__version__)"
       - name: Lint
         run: ruff check src tests ci examples
       - name: Tests (rules, front ends, closed forms, cost models, the SimPy accelerator and its C++ fast path)

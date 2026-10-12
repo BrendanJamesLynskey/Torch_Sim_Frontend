@@ -28,6 +28,23 @@ def test_gate_fails_on_an_arithmetic_change_and_tolerates_drift():
     assert bad == 1 and any("CHANGED" in x for x in lines)
 
 
+@pytest.mark.req("SF-15")
+def test_gate_allows_exactly_the_rotary_change_of_transformers_5_19():
+    """The baseline was traced with the rotary frequencies as a matmul (2 FLOPs per product); from 5.19 they
+    are an elementwise multiply (1 per product). The gate expects exactly that shift, and no other change."""
+    assert BASE["rotary_matmul"] is True
+    now = copy.deepcopy(BASE)
+    now["rotary_matmul"] = False
+    for k in now["traces"]:
+        now["traces"][k]["flops"] -= gate.rotary_flops(k, True) - gate.rotary_flops(k, False)
+    assert gate.compare(BASE, now, 0.5)[1] == 0
+    assert gate.rotary_flops("llama3-8b prefill 512", False) == 64 * 512    # head_dim 128: 64 products/position
+    assert gate.rotary_flops("llama3-8b decode @512", True) == 2 * 64       # one position
+    assert gate.rotary_flops("gpt2 prefill 256", True) == 0                 # learned positions
+    now["traces"]["llama3-8b prefill 512"]["flops"] += 1
+    assert gate.compare(BASE, now, 0.5)[1] == 1
+
+
 @pytest.mark.req("SF-13")
 def test_gate_fails_when_capture_slows_down():
     now = copy.deepcopy(BASE)

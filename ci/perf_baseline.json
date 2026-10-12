@@ -1,4 +1,5 @@
 {
+ "rotary_matmul": true,
  "traces": {
   "llama3-8b prefill 512": {
    "flops": 7825405642240,

@@ -151,13 +151,16 @@ def main() -> None:
            "Bytes moved (GB)", "Weights read (GB)", "Capture (s)"], rows)
     spec = models.analytic_spec("llama3-8b")
     an_w, an_att = 2 * spec.matmul_params * T, 4 * spec.n_layers * spec.d_model * T * T
-    rope = 2 * (spec.head_dim // 2) * T
+    # The rotary frequencies are a matmul up to transformers 5.18 and an elementwise multiply from 5.19 (probed).
+    rope = models.rotary_matmul_flops(spec.head_dim, T)
     onnx_tr = routes["ONNX (exported without weights)"]
+    folded = (f" (ONNX: {onnx_tr.flops_of('matmul'):,}, the rotary-frequency matmul of {rope:,} FLOPs constant-folded)"
+              if rope else ", ONNX included (this transformers computes the rotary frequencies elementwise)")
     p(f"* The four meta-device routes agree exactly on matmul FLOPs, {routes['dispatch (meta)'].flops_of('matmul'):,}"
-      f" (ONNX: {onnx_tr.flops_of('matmul'):,}, the rotary-frequency matmul of {rope:,} FLOPs constant-folded),")
+      f"{folded},")
     p(f"  and on weights read, {routes['dispatch (meta)'].weight_bytes:,} bytes.")
     p(f"* That is 2 x matmul parameters x tokens ({an_w:,}) + unmasked attention 4 x layers x d x T^2 ({an_att:,})"
-      f" + the rotary matmul ({rope:,}).")
+      + (f" + the rotary matmul ({rope:,})." if rope else "."))
     p(f"* torch.compile captured {n_graphs} graph(s), no graph breaks. The ONNX export (without weights) took"
       f" {export_s:.1f} s and is {onnx_mb:.1f} MB.")
     p("* Under fake CPU tensors attention is one fused operator per layer"
@@ -186,7 +189,7 @@ def main() -> None:
     old_dec_flops = 2 * spec.matmul_params + 4 * spec.n_layers * spec.d_model * C
     old_dec_w = int(spec.weight_bytes_total)
     norms = (2 * spec.n_layers + 1) * spec.d_model * 2          # RMSNorm weights: traced, not in the closed form
-    rope1 = 2 * (spec.head_dim // 2)
+    rope1 = models.rotary_matmul_flops(spec.head_dim, 1)
     table(["Quantity", "Closed form (InfSim)", "Operator trace", "Difference", "Why",
            "Closed form before 2026-10-03"], [
         ["Prefill matmul FLOPs, weights", f"{an_w:,}", f"{pre_tr.flops_of('matmul') - an_att - rope:,}", "0",
@@ -195,7 +198,9 @@ def main() -> None:
          " (unmasked)", f"{an_att / (2 * spec.n_layers * spec.d_model * T * (T + 1)):.3f}x",
          "the trace counts what the kernel computes, masked scores included", "same"],
         ["Decode matmul FLOPs", f"{int(dec_an.flops):,}", f"{dec_tr.flops_of('matmul'):,}",
-         f"{dec_tr.flops_of('matmul') - int(dec_an.flops):,}", f"the rotary-frequency matmul ({rope1:,}), not modelled",
+         f"{dec_tr.flops_of('matmul') - int(dec_an.flops):,}",
+         f"the rotary-frequency matmul ({rope1:,}), not modelled" if rope1
+         else "exact (rotary frequencies computed elementwise)",
          f"{old_dec_flops:,} (no self-attention: -{4 * spec.n_layers * spec.d_model:,})"],
         ["Decode weight bytes per step", f"{int(spec.weight_bytes_read(1)):,}", f"{dec_fake.weight_bytes:,}",
          f"{dec_fake.weight_bytes - int(spec.weight_bytes_read(1)):,}",

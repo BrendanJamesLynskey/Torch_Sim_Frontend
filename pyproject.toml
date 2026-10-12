@@ -11,8 +11,9 @@ license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
     "torch>=2.6",
-    # <5.19: 5.19 no longer emits the rotary-embedding matmul in traces, which the closed-form FLOP tests count.
-    "transformers>=4.50,<5.19",
+    # >=5.18: the oldest version CI tests. 5.19 computes the rotary frequencies elementwise rather than as a
+    # matmul; the closed forms probe which (simfront.models.rotary_runs_as_matmul), so both are supported.
+    "transformers>=5.18",
     "onnx>=1.17",
     "onnxscript>=0.3",
     "simpy>=4.1",

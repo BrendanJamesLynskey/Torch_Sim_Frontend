@@ -1,7 +1,12 @@
 """Behaviour and speed gate against ci/perf_baseline.json.
 
 * Arithmetic: the FLOPs and weight bytes of each reference trace are properties of the model,
-  not of the framework, so they must not change at all. A change fails the gate.
+  not of the framework, so they must not change at all. A change fails the gate. One known,
+  exact exception: transformers 5.19 computes the rotary frequencies with an elementwise
+  multiply instead of a matmul with an inner dimension of 1, which halves what a trace counts
+  for them (one multiply per product, where a matmul is charged a multiply and an add). The
+  baseline records which way it was traced (``rotary_matmul``), and the expected FLOPs are
+  shifted by exactly that term when the installed transformers differs.
 * Framework drift: operator counts and bytes moved depend on how PyTorch and transformers
   decompose the model. A library upgrade may change them; the gate reports every change
   (this is how an upgrade's effect on the trace is noticed) and fails only with --strict.
@@ -28,6 +33,16 @@ CASES = {"llama3-8b prefill 512": ("llama3-8b", 512, None), "llama3-8b decode @5
          "qwen2.5-0.5b prefill 256": ("qwen2.5-0.5b", 256, None), "gpt2 prefill 256": ("gpt2", 256, None)}
 
 
+def rotary_flops(case: str, as_matmul: bool) -> int:
+    """The FLOPs a trace of ``case`` charges for the rotary frequencies (positions x head_dim/2 products)."""
+    name, tokens, ctx = CASES[case]
+    c = models.config_fields(name)
+    if "rope_theta" not in c:                       # GPT-2: learned positions, no rotary embedding
+        return 0
+    products = (c["hidden_size"] // c["num_attention_heads"] // 2) * (tokens if ctx is None else 1)
+    return 2 * products if as_matmul else products
+
+
 def trace(name, tokens, ctx):
     m = models.build(name)
     if ctx is not None:
@@ -36,7 +51,7 @@ def trace(name, tokens, ctx):
 
 
 def measure() -> dict:
-    out = {"traces": {}}
+    out = {"rotary_matmul": models.rotary_runs_as_matmul(), "traces": {}}
     for k, case in CASES.items():
         t = trace(*case)
         out["traces"][k] = {"flops": t.flops, "weight_bytes": t.weight_bytes, "ops": len(t.ops), "bytes": t.bytes}
@@ -53,12 +68,18 @@ def compare(base: dict, now: dict, margin: float, strict: bool = False) -> tuple
     """The gate's verdict: (report lines, number of failures)."""
     lines = ["# simfront gate", "", "| check | baseline | now | verdict |", "|---|---|---|---|"]
     bad = 0
+    rot_b = base.get("rotary_matmul", True)
+    rot_n = now.get("rotary_matmul", rot_b)
     for k, b in base["traces"].items():
         n = now["traces"][k]
         for f in ("flops", "weight_bytes"):
-            ok = n[f] == b[f]
+            want, note = b[f], ""
+            if f == "flops" and rot_n != rot_b:
+                shift = rotary_flops(k, rot_n) - rotary_flops(k, rot_b)
+                want, note = want + shift, f" (rotary as {'matmul' if rot_n else 'elementwise'}: {shift:+,})"
+            ok = n[f] == want
             bad += not ok
-            lines.append(f"| {k}: {f} | {b[f]:,} | {n[f]:,} | {'ok' if ok else 'CHANGED'} |")
+            lines.append(f"| {k}: {f} | {b[f]:,}{note} | {n[f]:,} | {'ok' if ok else 'CHANGED'} |")
         for f in ("ops", "bytes"):
             ok = n[f] == b[f]
             bad += strict and not ok

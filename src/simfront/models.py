@@ -10,6 +10,7 @@ FLOP counts.
 
 from __future__ import annotations
 
+import functools
 import json
 from contextlib import contextmanager
 from importlib import resources
@@ -143,3 +144,37 @@ def analytic_spec(name: str):
         raise ValueError(f"{name}: not a SwiGLU decoder")
     return ModelSpec(name, n_layers=c["num_hidden_layers"], d_model=c["hidden_size"], n_heads=c["num_attention_heads"],
                      n_kv_heads=c["num_key_value_heads"], d_ff=c["intermediate_size"], vocab=c["vocab_size"])
+
+
+@functools.cache
+def rotary_runs_as_matmul(model_type: str = "llama") -> bool:
+    """Whether the installed transformers computes ``model_type``'s rotary frequencies with a matmul.
+
+    The rotary embedding needs the outer product of the positions and the inverse frequencies. Up to
+    transformers 5.18 the Llama, Mistral and Qwen2 code wrote it as a batched matmul with an inner
+    dimension of 1 (``inv_freq[:, None] @ position_ids[None, :]``), which a trace counts as a matmul of
+    2 x positions x head_dim/2 FLOPs. From 5.19 it is a broadcast multiply
+    (``position_ids[..., None] * inv_freq``): the same products, one elementwise multiply each, and no
+    matmul. Rather than test a version number, this traces the rotary module of a one-layer model of
+    that type once (on the meta device, which costs nothing) and looks at what actually ran.
+    """
+    from transformers import AutoConfig, AutoModel
+
+    from simfront.capture import trace_dispatch
+
+    cfg = AutoConfig.for_model(model_type, hidden_size=16, intermediate_size=16, num_hidden_layers=1,
+                               num_attention_heads=2, num_key_value_heads=1, vocab_size=8)
+    with torch.device("meta"):
+        rotary = AutoModel.from_config(cfg).rotary_emb
+    x = torch.zeros(1, 4, 16, device="meta")
+    positions = torch.arange(4, device="meta")[None]
+    return trace_dispatch(rotary, x, positions)[0].flops_of("matmul") > 0
+
+
+def rotary_matmul_flops(head_dim: int, positions: int, model_type: str = "llama") -> int:
+    """The matmul FLOPs a trace shows for computing the rotary frequencies of ``positions`` positions.
+
+    2 x positions x head_dim/2 when the installed transformers uses a matmul for it, otherwise 0 (it is
+    then ``positions x head_dim/2`` elementwise multiplies). See :func:`rotary_runs_as_matmul`.
+    """
+    return 2 * (head_dim // 2) * positions if rotary_runs_as_matmul(model_type) else 0

@@ -8,9 +8,10 @@ from simfront import models
 from simfront.capture import trace_dispatch
 
 
-def rope_flops(spec, tokens):
-    """The rotary-embedding frequency outer product, done once per forward as a bmm."""
-    return 2 * (spec.head_dim // 2) * tokens
+def rope_flops(spec, tokens, model_type="llama"):
+    """The rotary-frequency outer product, done once per forward: a bmm up to transformers 5.18, an
+    elementwise multiply from 5.19 (no matmul FLOPs). Probed from the installed version."""
+    return models.rotary_matmul_flops(spec.head_dim, tokens, model_type)
 
 
 @pytest.mark.req("SF-01")
@@ -34,7 +35,7 @@ def test_prefill_matmul_flops_equal_closed_form(name):
     tr = trace_dispatch(m, models.tokens(1, T))[0]
     weights = 2 * spec.matmul_params * T                # Disaggregated_Inference_Sim's prefill term
     attention = 4 * spec.n_layers * spec.d_model * T * T   # QK^T and AV, unmasked
-    assert tr.flops_of("matmul") == weights + attention + rope_flops(spec, T)
+    assert tr.flops_of("matmul") == weights + attention + rope_flops(spec, T, m.config.model_type)
     norms = (2 * spec.n_layers + 1) * spec.d_model
     assert tr.weight_bytes == 2 * (spec.matmul_params + T * spec.d_model + norms)
     assert all(p.is_meta for p in m.parameters())       # nothing was allocated
@@ -47,7 +48,7 @@ def test_qwen_biases_are_counted():
     kv = spec.n_kv_heads * spec.head_dim
     bias = T * spec.n_layers * (spec.d_model + 2 * kv)  # q, k and v projections carry biases
     assert tr.flops_of("matmul") == 2 * spec.matmul_params * T + 4 * spec.n_layers * spec.d_model * T * T \
-        + rope_flops(spec, T) + bias
+        + rope_flops(spec, T, "qwen2") + bias
 
 
 @pytest.mark.req("SF-05")
@@ -58,7 +59,8 @@ def test_decode_step_matches_closed_form():
     from disagg_sim.hardware import H100_SXM, CostModel
     analytic = CostModel(spec, H100_SXM).decode([C])
     # The new token attends to C cached keys and to itself: C + 1 keys. This test found that the closed form
-    # counted C; Disaggregated_Inference_Sim was corrected on 2026-10-03 and now agrees, up to the rotary matmul.
+    # counted C; Disaggregated_Inference_Sim was corrected on 2026-10-03 and now agrees, up to the rotary matmul
+    # (which transformers 5.19 and later no longer run as a matmul: then they agree exactly).
     assert tr.flops_of("matmul") == analytic.flops + rope_flops(spec, 1)
     # Weights read: the layers, the LM head and one embedding row (the closed form once charged the whole
     # table, 1.05 GB per step: also found here), plus the RMSNorm weights, which the closed form does not model.

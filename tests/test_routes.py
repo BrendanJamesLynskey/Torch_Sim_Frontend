@@ -22,8 +22,14 @@ def all_routes(cfg, tmp_path, device="cpu"):
 
 
 def rope(cfg):
-    """The rotary-frequency bmm: position-only arithmetic that ONNX constant-folds (static shapes)."""
-    return 2 * (cfg.hidden_size // cfg.num_attention_heads // 2) * T if cfg.model_type == "llama" else 0
+    """The rotary-frequency bmm: position-only arithmetic that ONNX constant-folds (static shapes).
+
+    Up to transformers 5.18 the other three routes run it as a matmul and ONNX folds it away. From 5.19 it is
+    an elementwise multiply, which ONNX folds as well, so there is no matmul term to give back and all four
+    routes agree with no correction (see test_rotary_frequencies_follow_the_installed_transformers)."""
+    if cfg.model_type != "llama":
+        return 0
+    return models.rotary_matmul_flops(cfg.hidden_size // cfg.num_attention_heads, T)
 
 
 def qk_av_and_weights(t, cfg=None):
@@ -85,6 +91,31 @@ def test_onnx_export_runs_in_onnxruntime_and_matches_pytorch(tmp_path):
     assert a.weight_bytes == b.weight_bytes
     lm_head = [o for o in b.ops if o.name == "onnx.MatMul"][-1]       # Transpose(W) was folded: still a weight
     assert lm_head.weight_bytes == 1000 * 256 * 4
+
+
+@pytest.mark.req("SF-03", "SF-04")
+def test_rotary_frequencies_follow_the_installed_transformers(tmp_path):
+    """The rotary outer product (positions x inverse frequencies) runs exactly once per forward, as one bmm
+    with an inner dimension of 1 (transformers up to 5.18: 2 x T x head_dim/2 matmul FLOPs) or as one broadcast
+    multiply (5.19 on: T x head_dim/2 elementwise FLOPs), as the probe says. Either way the exported ONNX graph
+    still contains it (a MatMul or a Mul) but the walker folds it: under static shapes the positions are
+    constants, so it is computed once at load time, as a runtime would, and costs nothing per inference."""
+    cfg, n = models.tiny_llama(), 24                 # n != head_dim / 2, so the two layouts cannot be confused
+    half = cfg.hidden_size // cfg.num_attention_heads // 2
+    m = models.build(cfg)
+    tr = trace_dispatch(m, models.tokens(1, n))[0]
+    outer_mm = [o for o in tr.ops if o.category == "matmul" and o.inputs[0].shape[-1] == 1]
+    outer_mul = [o for o in tr.ops if o.name == "aten.mul" and [i.shape for i in o.inputs] == [(1, n, 1), (half,)]]
+    if models.rotary_runs_as_matmul():
+        assert len(outer_mm) == 1 and outer_mm[0].flops == 2 * n * half and outer_mul == []
+    else:
+        assert outer_mm == [] and len(outer_mul) == 1 and outer_mul[0].flops == n * half
+    path = tmp_path / "m.onnx"
+    o = trace_onnx(path, *export_onnx(m, (models.tokens(1, n),), path, {"use_cache": False}, weights=False))
+    outer = [op for op in o.ops if (op.name == "onnx.MatMul" and op.inputs[0].shape[-1] == 1)
+             or (op.name == "onnx.Mul" and [i.shape for i in op.inputs] == [(1, n, 1), (half,)])]
+    assert len(outer) == 1 and outer[0].flops == 0 and outer[0].category == "view"
+    assert outer[0].name == ("onnx.MatMul" if models.rotary_runs_as_matmul() else "onnx.Mul")
 
 
 class Block(torch.nn.Module):
