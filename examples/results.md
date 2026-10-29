@@ -167,9 +167,10 @@ Operator coverage: llama3-8b, dispatch trace, on matmul engine (optical) + host 
 | meta (math attention) | 32,938,104,455,168 | 32,938,104,455,168 | 32,938,104,455,168 |
 | fake CPU (fused attention) | 30,739,081,199,616 | 30,739,081,199,616 | 32,959,579,291,648 |
 
-On the meta trace the two agree exactly. FlopCounterMode has no formula for the CPU flash-attention operator,
-so on the fused trace it silently omits 2.22 TFLOP of attention. A
-coverage report would have named it.
+On the meta trace the two agree exactly. Up to torch 2.14 FlopCounterMode has no formula for the CPU
+flash-attention operator, so on the fused trace it silently omits 2.22 TFLOP of attention. A
+coverage report would have named it. torch 2.15 added a formula that counts the operator's two matmuls but not
+its softmax (found by CI on 2026-10-29; the test checks both versions).
 
 ## 8. Test suite
 
