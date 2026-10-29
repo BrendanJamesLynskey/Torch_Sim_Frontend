@@ -311,9 +311,10 @@ def main() -> None:
          f"{pre_tr.flops_of('matmul') + pre_tr.flops_of('attention'):,}"],
         ["fake CPU (fused attention)", f"{fake_fc:,}", f"{pre_fake.flops_of('matmul'):,}",
          f"{pre_fake.flops_of('matmul') + pre_fake.flops_of('attention'):,}"]])
-    p("On the meta trace the two agree exactly. FlopCounterMode has no formula for the CPU flash-attention operator,")
-    p(f"so on the fused trace it silently omits {pre_fake.flops_of('attention') / 1e12:.2f} TFLOP of attention. A")
-    p("coverage report would have named it.")
+    p("On the meta trace the two agree exactly. Up to torch 2.14 FlopCounterMode has no formula for the CPU")
+    p(f"flash-attention operator, so on the fused trace it silently omits {pre_fake.flops_of('attention') / 1e12:.2f} TFLOP of attention. A")
+    p("coverage report would have named it. torch 2.15 added a formula that counts the operator's two matmuls but not")
+    p("its softmax (found by CI on 2026-10-29; the test checks both versions).")
 
     # ── 8. tests ────────────────────────────────────────────────────────
     h("8. Test suite")

@@ -86,12 +86,14 @@ def test_fake_cpu_gives_fused_attention_with_the_same_arithmetic(llama8b_prefill
     softmax = 5 * 32 * 32 * 512 * 512                   # the fused op's softmax share, 5 per score
     meta_bmm = llama8b_prefill.flops_of("matmul") - tr.flops_of("matmul")
     assert tr.flops_of("attention") - softmax == meta_bmm
-    # PyTorch's FlopCounterMode has no formula for the CPU flash-attention kernel: it drops these FLOPs.
+    # PyTorch's FlopCounterMode had no formula for the CPU flash-attention kernel up to torch 2.14: it dropped
+    # these FLOPs. torch 2.15 added one (CI, 2026-10-29): it counts the kernel's two matmuls, not its softmax.
     with models.fake_cpu():
         m = models.build("llama3-8b", device="cpu")
         with FlopCounterMode(display=False) as fc, torch.no_grad():
             m(models.tokens(1, 512, "cpu"), use_cache=False)
-    assert fc.get_total_flops() == tr.flops_of("matmul")
+    counts_flash = tuple(int(x) for x in torch.__version__.split("+")[0].split(".")[:2]) >= (2, 15)
+    assert fc.get_total_flops() == tr.flops_of("matmul") + (meta_bmm if counts_flash else 0)
 
 
 @pytest.mark.req("SF-13")
